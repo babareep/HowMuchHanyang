@@ -2,28 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { User } from '@supabase/supabase-js';
-import ItemImage from '@/components/ItemImage';
 import { supabase } from '@/lib/supabase';
 
 export default function WritePage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   
-  // 폼 입력 상태 관리
+  // 폼 상태 관리
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tradeType, setTradeType] = useState('SALE');
   const [price, setPrice] = useState('');
-  const [location, setLocation] = useState('한양대 내');
+  const [location, setLocation] = useState('한양대 애지문 앞');
+  const [rentalStartDate, setRentalStartDate] = useState('');
+  const [rentalEndDate, setRentalEndDate] = useState('');
   
-  // 대여(RENTAL) 전용 날짜 상태
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState('');
+  // 이미지 파일 관리
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 로그인 상태 확인 (비로그인 접근 차단)
+  // 로그인 체크
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -37,136 +37,157 @@ export default function WritePage() {
     checkUser();
   }, [router]);
 
-  // DB에 상품 등록하기
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || saving) return;
-    setFormError('');
-    const amount = Number(price);
-    if (!title.trim() || !description.trim() || !location.trim() || !price.trim()) {
-      setFormError('제목, 설명, 가격, 장소를 입력해 주세요.'); return;
-    }
-    if (!Number.isSafeInteger(amount) || amount < 0) {
-      setFormError('가격은 0 이상의 정수로 입력해 주세요.'); return;
-    }
-    if (tradeType === 'RENTAL' && (!startDate || !endDate || startDate > endDate)) {
-      setFormError('올바른 대여 가능 시작일과 종료일을 입력해 주세요.'); return;
-    }
-    setSaving(true);
-
-    // Supabase items 테이블 형식에 맞춰 데이터 묶기
-    const newItem = {
-      seller_id: user.id,
-      title: title.trim(),
-      description: description.trim(),
-      trade_type: tradeType,
-      price: amount,
-      location: location.trim(),
-      status: 'AVAILABLE',
-      rental_start_date: tradeType === 'RENTAL' ? startDate : null,
-      rental_end_date: tradeType === 'RENTAL' ? endDate : null,
-    };
-
-    try {
-      const { data, error } = await supabase.from('items').insert([newItem]).select('id').single();
-      if (error) {
-        setFormError(`등록 실패: ${error.message}`);
-      } else {
-        // 라우터가 화면 상태를 보존하더라도 다음 등록은 초기값에서 시작합니다.
-        setTitle('');
-        setDescription('');
-        setTradeType('SALE');
-        setPrice('');
-        setLocation('한양대 내');
-        setStartDate('');
-        setEndDate('');
-        setFormError('');
-        router.push(`/items/${encodeURIComponent(data.id)}`);
-      }
-    } catch {
-      setFormError('등록 결과를 확인하지 못했습니다. 목록에서 등록 여부를 확인한 뒤 다시 시도해 주세요.');
-    } finally {
-      setSaving(false);
+  // 이미지 선택 시 미리보기 처리
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setImagePreview(URL.createObjectURL(file)); // 로컬 미리보기 URL 생성
     }
   };
 
-  // 로그인 확인 전까지 빈 화면 렌더링
-  if (!user) return <p role="status" className="p-8 text-center">로그인 상태를 확인하는 중입니다...</p>;
+  // 상품 등록 (DB + Storage)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title || !price) return alert('제목과 가격은 필수입니다.');
+    if (tradeType === 'RENTAL' && (!rentalStartDate || !rentalEndDate)) {
+      return alert('대여 상품은 대여 가능 기간을 설정해야 합니다.');
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      let imageUrl = null;
+
+      // 1. 이미지가 선택되었다면 Supabase Storage에 먼저 업로드
+      if (imageFile) {
+        const fileExt = imageFile.name.split('.').pop();
+        // 파일명이 겹치지 않게 현재 시간과 랜덤 문자열 조합
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('items') // 방금 만든 버킷 이름
+          .upload(filePath, imageFile);
+
+        if (uploadError) throw uploadError;
+
+        // 업로드 성공 후 이미지를 누구나 볼 수 있는 공용 URL 가져오기
+        const { data: publicUrlData } = supabase.storage
+          .from('items')
+          .getPublicUrl(filePath);
+        
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      // 2. 알아낸 이미지 URL과 함께 items 테이블에 데이터 저장
+      const newItem = {
+        seller_id: user.id,
+        title,
+        description,
+        trade_type: tradeType,
+        price: parseInt(price),
+        location,
+        rental_start_date: tradeType === 'RENTAL' ? rentalStartDate : null,
+        rental_end_date: tradeType === 'RENTAL' ? rentalEndDate : null,
+        image_url: imageUrl, // 이미지 주소 추가!
+        status: 'AVAILABLE'
+      };
+
+      const { error: dbError } = await supabase.from('items').insert([newItem]);
+      if (dbError) throw dbError;
+
+      alert('성공적으로 등록되었습니다!');
+      router.push('/');
+      
+    } catch (error: any) {
+      alert(`등록 실패: ${error.message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12 px-6 font-sans">
-      <div className="max-w-2xl mx-auto bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-black text-slate-800">상품 등록하기</h1>
-          <button onClick={() => router.push('/')} className="text-slate-400 hover:text-slate-800 font-bold">
-            ✕ 취소
-          </button>
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-2xl mx-auto px-6 py-4 flex items-center gap-4">
+          <button onClick={() => router.push('/')} className="text-2xl text-slate-400 hover:text-slate-800">←</button>
+          <h1 className="text-xl font-extrabold text-slate-800">물품 등록하기</h1>
         </div>
+      </header>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div><ItemImage title="등록할 상품" /><p className="mt-2 text-sm text-slate-500">사진 없이도 기본 이미지로 상품을 등록할 수 있습니다.</p></div>
-          {/* 1. 거래 유형 선택 */}
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-3">어떤 거래를 하시겠습니까?</label>
-            <div className="flex gap-4">
-              <label className={`flex-1 flex items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition ${tradeType === 'SALE' ? 'border-orange-500 bg-orange-50 text-orange-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
-                <input type="radio" value="SALE" className="hidden" checked={tradeType === 'SALE'} onChange={(e) => setTradeType(e.target.value)} />
-                📦 판매 (SALE)
-              </label>
-              <label className={`flex-1 flex items-center justify-center p-4 border-2 rounded-xl cursor-pointer transition ${tradeType === 'RENTAL' ? 'border-teal-500 bg-teal-50 text-teal-700 font-bold' : 'border-slate-200 text-slate-500'}`}>
-                <input type="radio" value="RENTAL" className="hidden" checked={tradeType === 'RENTAL'} onChange={(e) => setTradeType(e.target.value)} />
-                🤝 대여 (RENTAL)
-              </label>
-            </div>
-          </div>
-
-          {/* 2. 상품 이름 */}
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">물품 이름</label>
-            <input required type="text" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500" placeholder="예: 한양대 과잠 L사이즈" />
-          </div>
-
-          {/* 3. 가격 */}
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">{tradeType === 'SALE' ? '판매 가격' : '1일 대여료'}</label>
-            <div className="relative">
-              <input required min="0" step="1" type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 pr-10 bg-slate-50 focus:bg-white focus:outline-blue-500" placeholder="숫자만 입력" />
-              <span className="absolute right-4 top-3 text-slate-400 font-medium">원</span>
-            </div>
-          </div>
+      <main className="max-w-2xl mx-auto px-6 py-8">
+        <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
           
-          {/* 4. 대여 날짜 (대여일 때만 등장) */}
+          {/* 이미지 업로드 섹션 */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-2">상품 사진</label>
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-24 shrink-0 bg-slate-100 border border-slate-200 rounded-xl overflow-hidden flex justify-center items-center">
+                {imagePreview ? (
+                  <img src={imagePreview} alt="미리보기" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-3xl text-slate-300">📷</span>
+                )}
+              </div>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange}
+                className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* 기존 입력 폼들 */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">거래 방식</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setTradeType('SALE')} className={`flex-1 py-3 rounded-xl font-bold transition ${tradeType === 'SALE' ? 'bg-orange-100 text-orange-700 border-2 border-orange-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}>판매</button>
+              <button type="button" onClick={() => setTradeType('RENTAL')} className={`flex-1 py-3 rounded-xl font-bold transition ${tradeType === 'RENTAL' ? 'bg-teal-100 text-teal-700 border-2 border-teal-200' : 'bg-slate-50 text-slate-400 border border-slate-200'}`}>대여</button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">제목</label>
+            <input type="text" value={title} onChange={e => setTitle(e.target.value)} required placeholder="예) 전공 서적 팝니다" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">가격 {tradeType === 'RENTAL' && '(1일 기준)'}</label>
+            <input type="number" value={price} onChange={e => setPrice(e.target.value)} required placeholder="숫자만 입력 (원)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800" />
+          </div>
+
           {tradeType === 'RENTAL' && (
-            <div className="flex gap-4 p-4 bg-teal-50 rounded-xl border border-teal-100">
+            <div className="bg-teal-50 p-4 rounded-xl border border-teal-100 flex gap-4">
               <div className="flex-1">
-                <label className="block text-xs font-bold text-teal-800 mb-2">대여 시작 가능일</label>
-                <input required type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-teal-200 rounded-lg p-2 text-sm" />
+                <label className="block text-xs font-bold text-teal-800 mb-1">대여 가능 시작일</label>
+                <input type="date" value={rentalStartDate} onChange={e => setRentalStartDate(e.target.value)} className="w-full bg-white border border-teal-200 rounded-lg px-3 py-2 text-sm font-medium" />
               </div>
               <div className="flex-1">
-                <label className="block text-xs font-bold text-teal-800 mb-2">대여 종료일</label>
-                <input required type="date" min={startDate || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-teal-200 rounded-lg p-2 text-sm" />
+                <label className="block text-xs font-bold text-teal-800 mb-1">대여 가능 종료일</label>
+                <input type="date" value={rentalEndDate} onChange={e => setRentalEndDate(e.target.value)} className="w-full bg-white border border-teal-200 rounded-lg px-3 py-2 text-sm font-medium" />
               </div>
             </div>
           )}
 
-          {/* 5. 거래 장소 */}
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">선호하는 거래 장소</label>
-            <input required type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500" />
+            <label className="block text-sm font-bold text-slate-700 mb-1">희망 거래 장소</label>
+            <input type="text" value={location} onChange={e => setLocation(e.target.value)} required placeholder="예) 제1공학관 1층 로비" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800" />
           </div>
 
-          {/* 6. 상세 설명 */}
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">상세 설명</label>
-            <textarea required rows={4} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500 resize-none" placeholder="물품 상태, 거래 가능 시간 등을 자세히 적어주세요." />
+            <label className="block text-sm font-bold text-slate-700 mb-1">상세 설명</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="물품 상태, 사용 기간 등을 자세히 적어주세요." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 resize-none"></textarea>
           </div>
 
-          {formError && <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{formError}</p>}
-          <button disabled={saving} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-lg py-4 rounded-xl transition shadow-md mt-4">
-            {saving ? '저장 중...' : '물품 등록하기'}
+          <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-black text-white font-black text-lg py-4 rounded-xl shadow-md transition disabled:bg-slate-300 mt-4">
+            {isSubmitting ? '업로드 중...' : '등록 완료하기'}
           </button>
         </form>
-      </div>
+      </main>
     </div>
   );
 }
