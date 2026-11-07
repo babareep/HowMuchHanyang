@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import type { Item } from '@/types/item';
 import { itemStatusLabel } from '@/types/item';
 import ItemImage from '@/components/ItemImage';
+import PurchaseRequestPanel from './PurchaseRequestPanel';
 
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +46,7 @@ export default function ItemDetail() {
               {current.item.trade_type === 'RENTAL' && <div><dt className="font-bold">대여 가능 기간</dt><dd>{current.item.rental_start_date ?? '미정'} ~ {current.item.rental_end_date ?? '미정'}</dd></div>}
             </dl>
             <section className="border-t border-slate-100 pt-5"><h2 className="mb-3 font-bold text-slate-900">상품 설명</h2><p className="whitespace-pre-wrap break-words text-slate-700">{current.item.description}</p></section>
+            <PurchaseRequestPanel item={current.item} onChanged={() => setAttempt(n => n + 1)} />
           </article>}
       </div>
     </main>
