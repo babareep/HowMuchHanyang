@@ -75,6 +75,7 @@ export default function Home() {
           
           {user ? (
             <div className="flex items-center gap-4">
+              <Link href="/trades" className="text-sm font-bold text-slate-700 hover:text-blue-700">내 거래</Link>
               <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
                 {user.email}
               </span>
