@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import ItemImage from '@/components/ItemImage';
+import CampusMap from '@/components/CampusMap';
+import { formatCampusLocation, type CampusPoint } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
 export default function WritePage() {
@@ -16,6 +18,7 @@ export default function WritePage() {
   const [tradeType, setTradeType] = useState('SALE');
   const [price, setPrice] = useState('');
   const [location, setLocation] = useState('한양대 내');
+  const [locationPoint, setLocationPoint] = useState<CampusPoint | null>(null);
   
   // 대여(RENTAL) 전용 날짜 상태
   const [startDate, setStartDate] = useState('');
@@ -61,7 +64,7 @@ export default function WritePage() {
       description: description.trim(),
       trade_type: tradeType,
       price: amount,
-      location: location.trim(),
+      location: formatCampusLocation(location, locationPoint),
       status: 'AVAILABLE',
       rental_start_date: tradeType === 'RENTAL' ? startDate : null,
       rental_end_date: tradeType === 'RENTAL' ? endDate : null,
@@ -78,6 +81,7 @@ export default function WritePage() {
         setTradeType('SALE');
         setPrice('');
         setLocation('한양대 내');
+        setLocationPoint(null);
         setStartDate('');
         setEndDate('');
         setFormError('');
@@ -151,8 +155,11 @@ export default function WritePage() {
 
           {/* 5. 거래 장소 */}
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">선호하는 거래 장소</label>
-            <input required type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500" />
+            <label htmlFor="trade-location" className="block text-sm font-bold text-slate-700 mb-2">선호하는 거래 장소</label>
+            <input id="trade-location" maxLength={120} placeholder="예: 학생회관 정문 앞" required type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500" />
+            <p className="mt-2 text-sm text-slate-500">건물 이름과 만날 지점을 적고, 지도에서 정확한 위치를 선택하세요. 지도 선택은 생략할 수 있습니다.</p>
+            <div className="mt-4"><CampusMap point={locationPoint} onChange={setLocationPoint} label={location} disabled={saving} /></div>
+            {locationPoint && <button type="button" disabled={saving} onClick={() => setLocationPoint(null)} className="mt-3 text-sm text-slate-600 underline">지도 위치 지우기</button>}
           </div>
 
           {/* 6. 상세 설명 */}

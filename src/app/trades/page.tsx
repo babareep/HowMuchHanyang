@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { locationLabel } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
 type TabType = 'MY_ITEMS' | 'RECEIVED' | 'SENT';
@@ -208,7 +209,7 @@ export default function TradesPage() {
                       <h3 className="font-bold text-slate-800 text-lg">{item.title}</h3>
                     </div>
                     <p className="text-sm font-semibold text-slate-600">
-                      {item.price?.toLocaleString()}원 {item.trade_type === 'RENTAL' && '/ 1일'} · 📍 {item.location}
+                      {item.price?.toLocaleString()}원 {item.trade_type === 'RENTAL' && '/ 1일'} · 📍 {locationLabel(item.location)}
                     </p>
                     <span className="inline-block mt-2 text-xs font-bold px-2 py-1 bg-slate-100 rounded text-slate-600">
                       상태: {item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (진행중)' : '거래 완료됨'}
@@ -267,7 +268,7 @@ export default function TradesPage() {
                           <p>예상 총 대여료: <span className="font-bold text-teal-800">{totalRentalPrice.toLocaleString()}원</span></p>
                         </>
                       )}
-                      <p>희망 장소: 📍 {req.item?.location}</p>
+                      <p>희망 장소: 📍 {locationLabel(req.item?.location)}</p>
                     </div>
 
                     {req.status === 'PENDING' && req.item?.status === 'AVAILABLE' && (
@@ -326,7 +327,7 @@ export default function TradesPage() {
                       {req.rental_start_date && (
                         <p>선택 대여 기간: <span className="font-bold text-teal-700">{req.rental_start_date} ~ {req.rental_end_date} (총 {totalRentalPrice.toLocaleString()}원)</span></p>
                       )}
-                      <p>거래 장소: 📍 {req.item?.location}</p>
+                      <p>거래 장소: 📍 {locationLabel(req.item?.location)}</p>
                     </div>
                   </div>
                 );

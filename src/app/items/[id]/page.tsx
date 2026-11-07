@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import TradeLocation from '@/components/TradeLocation';
 import { supabase } from '@/lib/supabase';
 
 export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -165,7 +166,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-400 mb-1">희망 거래 장소</h3>
-              <p className="font-medium text-slate-800 flex items-center gap-2">📍 {item.location}</p>
+              <TradeLocation value={item.location} />
             </div>
             {item.trade_type === 'RENTAL' && item.rental_start_date && (
               <div>
