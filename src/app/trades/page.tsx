@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { rentalDays, requestStatusLabel } from '@/lib/rental';
 
 export default function TradesPage() {
   const router = useRouter();
@@ -49,7 +50,9 @@ export default function TradesPage() {
         // 4. 화면에 보여주기 위해 물품 카드 안에 요청 리스트 끼워넣기
         const combinedItems = items.map(item => ({
           ...item,
-          trade_requests: requests.filter((req: any) => req.item_id === item.id)
+          trade_requests: requests
+            .filter((req: any) => req.item_id === item.id)
+            .sort((a: any, b: any) => (a.rental_start_date ?? '').localeCompare(b.rental_start_date ?? ''))
         }));
 
         setMyItems(combinedItems);
@@ -71,6 +74,18 @@ export default function TradesPage() {
     await supabase.from('items').update({ status: 'RESERVED' }).eq('id', itemId);
     
     alert('승인되었습니다!');
+    window.location.reload();
+  };
+
+  // 대여 요청 승인 / 거절 / 반납 확인 (DB 함수에서 권한·중복 기간을 원자적으로 검사)
+  const runRentalAction = async (fn: string, requestId: string, ask: string, done: string) => {
+    if (!confirm(ask)) return;
+    const { error } = await supabase.rpc(fn, { p_request_id: requestId });
+    if (error) {
+      alert(`❌ ${error.message}`);
+      return;
+    }
+    alert(done);
     window.location.reload();
   };
 
@@ -103,9 +118,9 @@ export default function TradesPage() {
               <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
                 <div>
                   <h2 className="text-lg font-bold text-slate-800">{item.title}</h2>
-                  <p className="text-sm font-medium text-blue-600">{item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (거래 진행중)' : '거래 완료됨'}</p>
+                  <p className="text-sm font-medium text-blue-600">{item.trade_type === 'RENTAL' ? `대여 · 1일 ${item.price?.toLocaleString()}원` : item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (거래 진행중)' : '거래 완료됨'}</p>
                 </div>
-                {item.status === 'RESERVED' && (
+                {item.trade_type === 'SALE' && item.status === 'RESERVED' && (
                   <button onClick={() => handleComplete(item.id)} className="bg-slate-800 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-slate-900 transition">
                     거래 최종 완료하기
                   </button>
@@ -120,13 +135,48 @@ export default function TradesPage() {
                   item.trade_requests?.map((req: any) => (
                     <div key={req.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
                       <div className="text-sm font-medium text-slate-700">
-                        {req.status === 'PENDING' ? '⏳ 승인 대기 중인 요청' : req.status === 'APPROVED' ? '✅ 승인된 요청' : '❌ 거절됨'}
+                        <div>{requestStatusLabel(req.status)}</div>
+                        {item.trade_type === 'RENTAL' && req.rental_start_date && (
+                          <div className="text-slate-500">
+                            {req.rental_start_date} ~ {req.rental_end_date} · {rentalDays(req.rental_start_date, req.rental_end_date)}일 ·{' '}
+                            {(item.price * rentalDays(req.rental_start_date, req.rental_end_date)).toLocaleString()}원
+                          </div>
+                        )}
                       </div>
-                      
-                      {item.status === 'AVAILABLE' && req.status === 'PENDING' && (
-                        <button onClick={() => handleApprove(req.id, item.id)} className="bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                          승인하기
-                        </button>
+
+                      {item.trade_type === 'RENTAL' ? (
+                        <div className="flex gap-2">
+                          {req.status === 'PENDING' && (
+                            <>
+                              <button
+                                onClick={() => runRentalAction('approve_rental_request', req.id, `${req.rental_start_date} ~ ${req.rental_end_date} 대여를 승인하시겠습니까?`, '승인되었습니다!')}
+                                className="bg-blue-600 text-white font-bold px-3 py-2 rounded-lg text-sm hover:bg-blue-700"
+                              >
+                                승인
+                              </button>
+                              <button
+                                onClick={() => runRentalAction('reject_rental_request', req.id, '이 요청을 거절하시겠습니까?', '거절되었습니다.')}
+                                className="bg-slate-200 text-slate-700 font-bold px-3 py-2 rounded-lg text-sm hover:bg-slate-300"
+                              >
+                                거절
+                              </button>
+                            </>
+                          )}
+                          {req.status === 'APPROVED' && (
+                            <button
+                              onClick={() => runRentalAction('complete_rental_request', req.id, '물품 반납을 확인하셨습니까?', '반납 완료 처리되었습니다!')}
+                              className="bg-slate-800 text-white font-bold px-3 py-2 rounded-lg text-sm hover:bg-slate-900"
+                            >
+                              반납 확인
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        item.status === 'AVAILABLE' && req.status === 'PENDING' && (
+                          <button onClick={() => handleApprove(req.id, item.id)} className="bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
+                            승인하기
+                          </button>
+                        )
                       )}
                     </div>
                   ))
