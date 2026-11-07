@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { formatCampusLocation, parseCampusLocation, locationLabel, mapPoint } from '../src/lib/campus-location.ts';
+import { formatCampusLocation, parseCampusLocation, locationLabel, mapPoint, nearestCampusBuilding, campusBuildings } from '../src/lib/campus-location.ts';
 
 test('legacy locations remain plain text without an invented pin', () => {
   assert.deepEqual(parseCampusLocation('학생회관 정문 앞'), { label: '학생회관 정문 앞', point: null });
@@ -24,4 +24,11 @@ test('pointer position accounts for scrolling and zoomed map size', () => {
   assert.deepEqual(mapPoint(300, 500, { left: -100, top: -300, width: 800, height: 1600 }), { x: 50, y: 50 });
   assert.deepEqual(mapPoint(-10, 5000, { left: 0, top: 0, width: 100, height: 100 }), { x: 0, y: 100 });
   assert.equal(mapPoint(0, 0, { left: 0, top: 0, width: 0, height: 0 }), null);
+});
+
+test('selecting a building center returns that building; invalid points are ignored', () => {
+  for (const building of campusBuildings) assert.equal(nearestCampusBuilding(building)?.id, building.id);
+  assert.equal(nearestCampusBuilding({ x: NaN, y: 0 }), null);
+  const studentHall = campusBuildings.find(b => b.id === '107');
+  assert.equal(nearestCampusBuilding({ x: studentHall.x + 0.2, y: studentHall.y + 0.2 }).id, '107');
 });

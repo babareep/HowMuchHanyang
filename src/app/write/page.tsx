@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import ItemImage from '@/components/ItemImage';
 import CampusMap from '@/components/CampusMap';
-import { formatCampusLocation, type CampusPoint } from '@/lib/campus-location';
+import { formatCampusLocation, nearestCampusBuilding, type CampusPoint } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
 export default function WritePage() {
@@ -157,8 +157,8 @@ export default function WritePage() {
           <div>
             <label htmlFor="trade-location" className="block text-sm font-bold text-slate-700 mb-2">선호하는 거래 장소</label>
             <input id="trade-location" maxLength={120} placeholder="예: 학생회관 정문 앞" required type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full border border-slate-200 rounded-lg p-3 bg-slate-50 focus:bg-white focus:outline-blue-500" />
-            <p className="mt-2 text-sm text-slate-500">건물 이름과 만날 지점을 적고, 지도에서 정확한 위치를 선택하세요. 지도 선택은 생략할 수 있습니다.</p>
-            <div className="mt-4"><CampusMap point={locationPoint} onChange={setLocationPoint} label={location} disabled={saving} /></div>
+            <p className="mt-2 text-sm text-slate-500">지도를 누르면 가장 가까운 건물 이름이 자동 입력됩니다. 정문·로비 등 만날 지점은 직접 수정해 주세요. 지도 선택은 생략할 수 있습니다.</p>
+            <div className="mt-4"><CampusMap point={locationPoint} onChange={(point) => { setLocationPoint(point); const building = nearestCampusBuilding(point); if (building) setLocation(`${building.name} 부근`); }} label={location} disabled={saving} /></div>
             {locationPoint && <button type="button" disabled={saving} onClick={() => setLocationPoint(null)} className="mt-3 text-sm text-slate-600 underline">지도 위치 지우기</button>}
           </div>
 
