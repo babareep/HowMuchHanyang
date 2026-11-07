@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
+  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans pb-12">
+    <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
       {/* 상단 헤더 */}
       <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-6 py-4 flex justify-between items-center">
@@ -116,7 +118,7 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {items.map((item) => (
-              <div key={item.id} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition">
+              <div key={item.id} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer" onClick={() => alert('상세 페이지는 다음 단계에서 만듭니다!')}>
                 <div className="flex justify-between items-start mb-3">
                   <span className={`text-xs px-2.5 py-1 rounded-md font-extrabold ${
                     item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
@@ -145,6 +147,16 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {/* 오른쪽 아래 둥둥 떠있는 글쓰기 버튼 (로그인 사용자만 보임) */}
+      {user && (
+        <button 
+          onClick={() => router.push('/write')}
+          className="fixed bottom-8 right-8 bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 px-6 rounded-full shadow-xl transition transform hover:scale-105"
+        >
+          + 내 물품 등록하기
+        </button>
+      )}
     </div>
   );
 }
