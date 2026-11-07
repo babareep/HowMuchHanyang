@@ -21,7 +21,6 @@ export default function TradesPage() {
       setUser(session.user);
 
       try {
-        // 1. 내가 올린 물품만 먼저 확실하게 가져오기
         const { data: itemsData, error: itemsError } = await supabase
           .from('items')
           .select('*')
@@ -31,10 +30,8 @@ export default function TradesPage() {
         if (itemsError) throw itemsError;
         const items = itemsData || [];
 
-        // 2. 내 물품들의 ID만 추려내기
         const itemIds = items.map(item => item.id);
 
-        // 3. 내 물품에 달린 요청들만 따로 가져오기 (JOIN 캐시 에러 원천 차단)
         let requests = [];
         if (itemIds.length > 0) {
           const { data: reqData, error: reqError } = await supabase
@@ -46,7 +43,6 @@ export default function TradesPage() {
           requests = reqData || [];
         }
 
-        // 4. 화면에 보여주기 위해 물품 카드 안에 요청 리스트 끼워넣기
         const combinedItems = items.map(item => ({
           ...item,
           trade_requests: requests.filter((req: any) => req.item_id === item.id)
@@ -63,9 +59,16 @@ export default function TradesPage() {
     fetchData();
   }, [router]);
 
-  // 요청 승인 처리
+  // 날짜 간 일수 계산 함수 (대여일 경우 사용)
+  const calculateDays = (start: string, end: string) => {
+    if (!start || !end) return 0;
+    const s = new Date(start);
+    const e = new Date(end);
+    return Math.ceil(Math.abs(e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  };
+
   const handleApprove = async (requestId: string, itemId: string) => {
-    if (!confirm('이 요청을 승인하시겠습니까? (다른 요청들은 거절 처리됩니다)')) return;
+    if (!confirm('이 요청을 승인하시겠습니까? (다른 요청들은 자동 거절됩니다)')) return;
     
     await supabase.from('trade_requests').update({ status: 'APPROVED' }).eq('id', requestId);
     await supabase.from('items').update({ status: 'RESERVED' }).eq('id', itemId);
@@ -74,12 +77,12 @@ export default function TradesPage() {
     window.location.reload();
   };
 
-  // 판매 완료 처리
-  const handleComplete = async (itemId: string) => {
-    if (!confirm('거래를 최종 완료하시겠습니까?')) return;
+  const handleComplete = async (itemId: string, tradeType: string) => {
+    const actionText = tradeType === 'RENTAL' ? '반납 처리를 완료' : '거래를 최종 완료';
+    if (!confirm(`이 상품의 ${actionText}하시겠습니까?`)) return;
     
     await supabase.from('items').update({ status: 'COMPLETED' }).eq('id', itemId);
-    alert('거래가 완료되었습니다!');
+    alert('완료되었습니다!');
     window.location.reload();
   };
 
@@ -102,12 +105,26 @@ export default function TradesPage() {
             <div key={item.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
               <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-100">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-800">{item.title}</h2>
-                  <p className="text-sm font-medium text-blue-600">{item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (거래 진행중)' : '거래 완료됨'}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs px-2 py-1 rounded font-bold ${item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'}`}>
+                      {item.trade_type === 'SALE' ? '판매' : '대여'}
+                    </span>
+                    <h2 className="text-lg font-bold text-slate-800">{item.title}</h2>
+                  </div>
+                  <p className="text-sm font-medium text-blue-600">
+                    {item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (진행중)' : '거래 완료됨'}
+                  </p>
                 </div>
                 {item.status === 'RESERVED' && (
-                  <button onClick={() => handleComplete(item.id)} className="bg-slate-800 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-slate-900 transition">
-                    거래 최종 완료하기
+                  <button 
+                    onClick={() => handleComplete(item.id, item.trade_type)} 
+                    className={`font-bold px-4 py-2 rounded-lg text-sm transition ${
+                      item.trade_type === 'RENTAL' 
+                        ? 'bg-teal-700 hover:bg-teal-800 text-white' 
+                        : 'bg-slate-800 hover:bg-slate-900 text-white'
+                    }`}
+                  >
+                    {item.trade_type === 'RENTAL' ? '반납 완료하기' : '판매 완료하기'}
                   </button>
                 )}
               </div>
@@ -117,19 +134,33 @@ export default function TradesPage() {
                 {item.trade_requests?.length === 0 ? (
                   <p className="text-sm text-slate-400">아직 들어온 요청이 없습니다.</p>
                 ) : (
-                  item.trade_requests?.map((req: any) => (
-                    <div key={req.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
-                      <div className="text-sm font-medium text-slate-700">
-                        {req.status === 'PENDING' ? '⏳ 승인 대기 중인 요청' : req.status === 'APPROVED' ? '✅ 승인된 요청' : '❌ 거절됨'}
+                  item.trade_requests?.map((req: any) => {
+                    const days = item.trade_type === 'RENTAL' ? calculateDays(req.rental_start_date, req.rental_end_date) : 0;
+                    const totalPrice = days * item.price;
+
+                    return (
+                      <div key={req.id} className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div className="space-y-1">
+                          <div className="text-sm font-bold text-slate-700">
+                            {req.status === 'PENDING' ? '⏳ 승인 대기 중' : req.status === 'APPROVED' ? '✅ 승인된 요청' : '❌ 거절됨'}
+                          </div>
+                          {/* 대여 상품일 경우 요청 기간 및 예상 금액 추가 표시 */}
+                          {item.trade_type === 'RENTAL' && req.rental_start_date && (
+                            <div className="text-xs text-slate-500">
+                              📅 희망 기간: {req.rental_start_date} ~ {req.rental_end_date} <br/>
+                              💰 예상 수익: {days}일 ({totalPrice.toLocaleString()}원)
+                            </div>
+                          )}
+                        </div>
+                        
+                        {item.status === 'AVAILABLE' && req.status === 'PENDING' && (
+                          <button onClick={() => handleApprove(req.id, item.id)} className="bg-blue-600 text-white font-bold px-6 py-2 rounded-lg text-sm hover:bg-blue-700 shrink-0">
+                            승인하기
+                          </button>
+                        )}
                       </div>
-                      
-                      {item.status === 'AVAILABLE' && req.status === 'PENDING' && (
-                        <button onClick={() => handleApprove(req.id, item.id)} className="bg-blue-600 text-white font-bold px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
-                          승인하기
-                        </button>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
