@@ -32,3 +32,16 @@ test('selecting a building center returns that building; invalid points are igno
   const studentHall = campusBuildings.find(b => b.id === '107');
   assert.equal(nearestCampusBuilding({ x: studentHall.x + 0.2, y: studentHall.y + 0.2 }).id, '107');
 });
+
+test('corrected campus landmarks and nearby points resolve independently', () => {
+  const fromPixels = (x, y) => ({ x: x / 1008 * 100, y: y / 1040 * 100 });
+  for (const [x, y, name] of [
+    [619, 678, '사자가 군것질할때 (사군)'],
+    [700, 742, '제2공학관'], [688, 731, '제2공학관'],
+    [687, 685, '학군단'],
+    [628, 330, '한양여자대학교 식품영양관'], [630, 317, '한양여자대학교 식품영양관'],
+    [626, 267, '한양여자대학교 유아교육관'],
+    [304, 825, '정문'], [315, 832, '정문'],
+    [949, 530, '후문'], [936, 526, '후문'],
+  ]) assert.equal(nearestCampusBuilding(fromPixels(x, y)).name, name);
+});
