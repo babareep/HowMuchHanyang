@@ -72,6 +72,15 @@ export default function WritePage() {
       if (error) {
         setFormError(`등록 실패: ${error.message}`);
       } else {
+        // 라우터가 화면 상태를 보존하더라도 다음 등록은 초기값에서 시작합니다.
+        setTitle('');
+        setDescription('');
+        setTradeType('SALE');
+        setPrice('');
+        setLocation('한양대 내');
+        setStartDate('');
+        setEndDate('');
+        setFormError('');
         router.push(`/items/${encodeURIComponent(data.id)}`);
       }
     } catch {
