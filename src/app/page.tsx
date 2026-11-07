@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import type { User } from '@supabase/supabase-js';
+import type { Item } from '@/types/item';
+import { itemStatusLabel } from '@/types/item';
+import ItemImage from '@/components/ItemImage';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [items, setItems] = useState<any[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     // 1. 로그인 상태 실시간 감지
@@ -23,9 +29,15 @@ export default function Home() {
 
     // 3. 상품 목록 불러오기
     const fetchItems = async () => {
-      const { data, error } = await supabase.from('items').select('*').order('created_at', { ascending: false });
-      if (!error) setItems(data || []);
-      setLoading(false);
+      try {
+        const { data, error } = await supabase.from('items').select('*').order('created_at', { ascending: false });
+        if (error) setLoadError('상품을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.');
+        else setItems(data || []);
+      } catch {
+        setLoadError('네트워크 연결을 확인하고 다시 시도해 주세요.');
+      } finally {
+        setLoading(false);
+      }
     };
     fetchItems();
 
@@ -111,6 +123,10 @@ export default function Home() {
           <div className="text-center py-12 text-slate-400 font-medium animate-pulse">
             상품을 불러오는 중입니다...
           </div>
+        ) : loadError ? (
+          <div role="alert" className="rounded-xl bg-red-50 p-6 text-red-700">
+            <p>{loadError}</p><button onClick={() => window.location.reload()} className="mt-3 underline">다시 시도</button>
+          </div>
         ) : items.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-2xl border border-slate-100 text-slate-500 shadow-sm">
             아직 등록된 물품이 없습니다.
@@ -118,7 +134,8 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {items.map((item) => (
-              <div key={item.id} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition cursor-pointer" onClick={() => alert('상세 페이지는 다음 단계에서 만듭니다!')}>
+              <Link key={item.id} href={`/items/${encodeURIComponent(item.id)}`} className="block bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition focus-visible:outline-2 focus-visible:outline-blue-600">
+                <div className="mb-4"><ItemImage src={item.image_url} title={item.title} /></div>
                 <div className="flex justify-between items-start mb-3">
                   <span className={`text-xs px-2.5 py-1 rounded-md font-extrabold ${
                     item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
@@ -139,10 +156,10 @@ export default function Home() {
                     {item.trade_type === 'RENTAL' && <span className="text-xs text-slate-400 font-normal ml-1">/ 1일</span>}
                   </div>
                   <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                    {item.status === 'AVAILABLE' ? '거래가능' : item.status}
+                    {itemStatusLabel(item.status)}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
