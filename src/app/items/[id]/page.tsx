@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { kstToday, rentalDays, validateRentalRange, requestStatusLabel } from '@/lib/rental';
 
 export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -12,7 +13,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
   const [user, setUser] = useState<any>(null);
   const [item, setItem] = useState<any>(null);
-  const [existingRequest, setExistingRequest] = useState<any>(null);
+  const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
@@ -52,11 +55,9 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
           .select('*')
           .eq('item_id', id)
           .eq('buyer_id', currentUser.id)
-          .maybeSingle();
+          .order('created_at', { ascending: false });
 
-        if (requestData) {
-          setExistingRequest(requestData);
-        }
+        setMyRequests(requestData ?? []);
       }
       
       setLoading(false);
@@ -78,8 +79,8 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
         item_id: item.id,
         buyer_id: user.id,
         status: 'PENDING',
-        rental_start_date: item.trade_type === 'RENTAL' ? item.rental_start_date : null,
-        rental_end_date: item.trade_type === 'RENTAL' ? item.rental_end_date : null,
+        rental_start_date: null,
+        rental_end_date: null,
       };
 
       const { error } = await supabase.from('trade_requests').insert([newRequest]);
@@ -95,6 +96,37 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  // 대여 요청 (DB 함수에서 날짜·기간·권한을 다시 검증)
+  const handleRentalRequest = async () => {
+    if (!user) {
+      alert('로그인이 필요한 서비스입니다.');
+      return;
+    }
+    const message = validateRentalRange(startDate, endDate, item.rental_start_date, item.rental_end_date);
+    if (message) {
+      alert(message);
+      return;
+    }
+    const days = rentalDays(startDate, endDate);
+    const total = item.price * days;
+    if (!confirm(`${startDate} ~ ${endDate} (${days}일)\n총 대여료 ${total.toLocaleString()}원 (안내용 · 실제 결제 없음)\n\n대여 요청을 보내시겠습니까?`)) return;
+
+    setRequesting(true);
+    const { error } = await supabase.rpc('create_rental_request', {
+      p_item_id: item.id,
+      p_start: startDate,
+      p_end: endDate,
+    });
+    setRequesting(false);
+
+    if (error) {
+      alert(`❌ 요청 실패: ${error.message}`);
+    } else {
+      alert('✅ 대여 요청을 보냈습니다!\n판매자가 승인하면 예약이 확정됩니다.');
+      window.location.reload();
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-bold text-slate-400">데이터를 불러오는 중...</div>;
   }
@@ -102,6 +134,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   if (!item) return null;
 
   const isMyItem = user?.id === item.seller_id;
+  const existingRequest = myRequests[0] ?? null; // 판매 상품용
+  const today = kstToday();
+  const minStart = item.rental_start_date && item.rental_start_date > today ? item.rental_start_date : today;
+  const selectedDays = startDate && endDate && endDate >= startDate ? rentalDays(startDate, endDate) : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-32">
@@ -161,6 +197,25 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
                 </p>
               </div>
             )}
+
+            {item.trade_type === 'RENTAL' && myRequests.length > 0 && (
+              <div>
+                <h3 className="text-sm font-bold text-slate-400 mb-1">내 대여 요청</h3>
+                <ul className="space-y-2">
+                  {myRequests.map((req) => {
+                    const days = rentalDays(req.rental_start_date, req.rental_end_date);
+                    return (
+                      <li key={req.id} className="flex justify-between bg-slate-50 px-4 py-2 rounded-lg text-sm">
+                        <span>
+                          {req.rental_start_date} ~ {req.rental_end_date} ({days}일 · {(item.price * days).toLocaleString()}원)
+                        </span>
+                        <span className="font-bold">{requestStatusLabel(req.status)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -175,6 +230,47 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             <button disabled className="w-full bg-slate-100 border border-slate-300 text-slate-600 font-bold text-lg py-4 rounded-xl">
               내 물품입니다 (상태 변경은 '내 거래'에서 지원 예정)
             </button>
+          ) : item.trade_type === 'RENTAL' && item.status === 'AVAILABLE' ? (
+            <div className="space-y-3">
+              <div className="flex gap-2 items-center">
+                <label className="flex-1 text-xs font-bold text-slate-500">
+                  시작일
+                  <input
+                    type="date"
+                    value={startDate}
+                    min={minStart}
+                    max={item.rental_end_date ?? undefined}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 text-sm text-slate-800"
+                  />
+                </label>
+                <label className="flex-1 text-xs font-bold text-slate-500">
+                  종료일
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || minStart}
+                    max={item.rental_end_date ?? undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="mt-1 w-full border border-slate-300 rounded-lg p-2 text-sm text-slate-800"
+                  />
+                </label>
+              </div>
+              {selectedDays > 0 && (
+                <p className="text-sm text-slate-700">
+                  {item.price.toLocaleString()}원 × {selectedDays}일 ={' '}
+                  <b className="text-blue-900">{(item.price * selectedDays).toLocaleString()}원</b>
+                  <span className="text-slate-400"> (안내용 · 실제 결제 없음)</span>
+                </p>
+              )}
+              <button
+                onClick={handleRentalRequest}
+                disabled={requesting}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-lg py-4 rounded-xl transition shadow-md"
+              >
+                {requesting ? '요청 전송 중...' : '대여 요청하기'}
+              </button>
+            </div>
           ) : item.status !== 'AVAILABLE' ? (
             <button disabled className="w-full bg-slate-200 text-slate-500 font-bold text-lg py-4 rounded-xl">
               이미 거래가 완료되었거나 예약 중인 상품입니다
