@@ -12,19 +12,25 @@ import { supabase } from '@/lib/supabase';
 export default function WritePage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   return (
     <Suspense fallback={<p role="status" className="p-8 text-center">페이지를 불러오는 중입니다...</p>}>
-      <WriteForm searchParams={searchParams} />
+      <WriteFormRoute searchParams={searchParams} />
     </Suspense>
   );
 }
 
-function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+function WriteFormRoute({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  const { edit } = use(searchParams);
+  const editId = typeof edit === 'string' && edit.trim() ? edit : null;
+  // Recreate all input/preview state when switching item or returning to creation.
+  return <WriteForm key={editId ?? 'new-item'} editId={editId} />;
+}
+
+function WriteForm({ editId }: { editId: string | null }) {
   const router = useRouter();
-  // ?edit=<상품 id> 로 들어오면 기존 글 수정 모드
-  const editId = use(searchParams).edit ?? null;
   const isEdit = Boolean(editId);
   const [user, setUser] = useState<User | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [editLoaded, setEditLoaded] = useState(!isEdit);
+  const [loadError, setLoadError] = useState('');
 
   // 폼 상태 관리
   const [title, setTitle] = useState('');
@@ -50,8 +56,11 @@ function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> 
 
   // 로그인 체크
   useEffect(() => {
+    let active = true;
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (!active) return;
+      if (sessionError) throw sessionError;
       if (!session) {
         alert('로그인이 필요한 서비스입니다.');
         router.push('/');
@@ -59,6 +68,7 @@ function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> 
       }
       if (editId) {
         const { data: item, error } = await supabase.from('items').select('*').eq('id', editId).maybeSingle();
+        if (!active) return;
         if (error || !item) {
           alert('존재하지 않거나 삭제된 상품입니다.');
           router.push('/');
@@ -83,7 +93,10 @@ function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> 
       }
       setUser(session.user);
     };
-    checkUser();
+    checkUser().catch(() => {
+      if (active) setLoadError('상품 정보를 불러오지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+    });
+    return () => { active = false; };
   }, [router, editId]);
 
   // 이미지 선택 시 미리보기 처리
@@ -196,6 +209,7 @@ function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> 
     }
   };
 
+  if (loadError) return <main className="mx-auto max-w-2xl p-8 text-slate-800"><p role="alert">{loadError}</p><button type="button" className="mt-4 text-blue-700 underline" onClick={() => window.location.reload()}>다시 시도</button></main>;
   if (!user || !editLoaded) return <p role="status" className="p-8 text-center">{isEdit ? '상품 정보를 불러오는 중입니다...' : '로그인 상태를 확인하는 중입니다...'}</p>;
 
   return (
