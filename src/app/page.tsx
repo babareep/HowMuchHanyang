@@ -17,6 +17,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
+  // 한양대 이메일 직접 인증 상태
+  const [inputEmail, setInputEmail] = useState('');
+  const [inputPassword, setInputPassword] = useState('');
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
   useEffect(() => {
     // 1. 로그인 상태 실시간 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -25,7 +30,7 @@ export default function Home() {
     
     // 2. 초기 로딩 시 세션 확인
     supabase.auth.getSession().then(({ data: { session } }) => {
-        setUser(session?.user || null);
+      setUser(session?.user || null);
     });
 
     // 3. 상품 목록 불러오기
@@ -47,7 +52,53 @@ export default function Home() {
     };
   }, []);
 
-  // 간편 로그인 (실패 시 에러 팝업 띄움)
+  // 한양대 도메인 검증 함수
+  const validateHanyangEmail = (emailStr: string) => {
+    return emailStr.trim().toLowerCase().endsWith('@hanyang.ac.kr');
+  };
+
+  // 직접 로그인 / 회원가입 핸들러
+  const handleAuth = async (isSignUp: boolean) => {
+    if (!inputEmail.trim() || !inputPassword.trim()) {
+      alert('이메일과 비밀번호를 모두 입력해 주세요.');
+      return;
+    }
+
+    // 🔒 1순위 핵심 검증: @hanyang.ac.kr 계정인지 차단 검사
+    if (!validateHanyangEmail(inputEmail)) {
+      alert('❌ 가입/로그인 불가: 한양대학교 웹메일(@hanyang.ac.kr) 계정으로만 이용하실 수 있습니다.');
+      return;
+    }
+
+    setAuthSubmitting(true);
+
+    try {
+      if (isSignUp) {
+        // 회원가입
+        const { error } = await supabase.auth.signUp({
+          email: inputEmail.trim(),
+          password: inputPassword,
+        });
+        if (error) throw error;
+        alert('🎉 한양대 학생 인증 및 회원가입이 완료되었습니다!\n로그인해 주세요.');
+      } else {
+        // 로그인
+        const { error } = await supabase.auth.signInWithPassword({
+          email: inputEmail.trim(),
+          password: inputPassword,
+        });
+        if (error) throw error;
+        setInputEmail('');
+        setInputPassword('');
+      }
+    } catch (err: any) {
+      alert(`인증 실패: ${err.message}`);
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  // 해커톤 시연용 간편 로그인 (원클릭)
   const handleQuickLogin = async (email: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -55,7 +106,7 @@ export default function Home() {
     });
     
     if (error) {
-      alert(`❌ 로그인 실패!\n이유: ${error.message}\n(Supabase에 계정이 제대로 만들어졌는지, 비밀번호가 맞는지 확인해 주세요)`);
+      alert(`❌ 로그인 실패!\n이유: ${error.message}\n(Supabase에 계정이 등록되어 있는지 확인해 주세요)`);
     }
   };
 
@@ -77,7 +128,7 @@ export default function Home() {
           {user ? (
             <div className="flex items-center gap-3 sm:gap-4">
               <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 hidden sm:inline-block">
-                {user.email}
+                🎓 {user.email}
               </span>
               <button 
                 onClick={() => router.push('/trades')} 
@@ -99,23 +150,76 @@ export default function Home() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
-        {/* 로그인 버튼 섹션 */}
+        {/* 로그인 / 회원가입 섹션 (미로그인 시 노출) */}
         {!user && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">🚀 테스트 계정으로 시작하기</h2>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button 
-                onClick={() => handleQuickLogin('user_a@hanyang.ac.kr')}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-sm"
-              >
-                A 계정으로 로그인 (user_a)
-              </button>
-              <button 
-                onClick={() => handleQuickLogin('user_b@hanyang.ac.kr')}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl transition shadow-sm"
-              >
-                B 계정으로 로그인 (user_b)
-              </button>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 space-y-6">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-blue-700 font-black text-sm bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-md">
+                  한양대 전용 인증
+                </span>
+                <h2 className="text-lg font-black text-slate-800">캠퍼스 학생 로그인</h2>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                신뢰할 수 있는 학내 직거래를 위해 <strong>@hanyang.ac.kr</strong> 이메일만 허용됩니다.
+              </p>
+            </div>
+
+            {/* 이메일 / 비밀번호 입력 폼 */}
+            <div className="space-y-3">
+              <input
+                type="email"
+                placeholder="한양대 이메일 입력 (예: student@hanyang.ac.kr)"
+                value={inputEmail}
+                onChange={(e) => setInputEmail(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:border-blue-600"
+              />
+              <input
+                type="password"
+                placeholder="비밀번호 입력"
+                value={inputPassword}
+                onChange={(e) => setInputPassword(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:border-blue-600"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={authSubmitting}
+                  onClick={() => handleAuth(false)}
+                  className="flex-1 bg-slate-900 hover:bg-black text-white font-bold py-3 rounded-xl text-sm transition disabled:bg-slate-300"
+                >
+                  로그인
+                </button>
+                <button
+                  type="button"
+                  disabled={authSubmitting}
+                  onClick={() => handleAuth(true)}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm transition disabled:bg-slate-300"
+                >
+                  새 한양인 회원가입
+                </button>
+              </div>
+            </div>
+
+            {/* 발표/심사용 빠른 테스트 계정 바로가기 */}
+            <div className="pt-4 border-t border-slate-100">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                ⚡ 발표 심사용 원클릭 계정
+              </span>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button 
+                  onClick={() => handleQuickLogin('user_a@hanyang.ac.kr')}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-3 rounded-lg text-xs transition"
+                >
+                  A 계정 (user_a@hanyang.ac.kr)
+                </button>
+                <button 
+                  onClick={() => handleQuickLogin('user_b@hanyang.ac.kr')}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-3 rounded-lg text-xs transition"
+                >
+                  B 계정 (user_b@hanyang.ac.kr)
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -172,7 +276,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 오른쪽 아래 둥둥 떠있는 글쓰기 버튼 (로그인 사용자만 보임) */}
+      {/* 오른쪽 아래 글쓰기 플로팅 버튼 */}
       {user && (
         <button 
           onClick={() => router.push('/write')}

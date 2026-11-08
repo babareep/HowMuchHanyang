@@ -71,7 +71,6 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       const end = new Date(endDate);
       
       if (start <= end) {
-        // 같은 날이면 1일로 계산되도록 +1 처리
         const diffTime = Math.abs(end.getTime() - start.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
         setRentalDays(diffDays);
@@ -83,10 +82,10 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     }
   }, [startDate, endDate, item]);
 
+  // 거래 요청 전송
   const handleRequestTrade = async () => {
     if (!user) return alert('로그인이 필요한 서비스입니다.');
 
-    // 대여 상품일 경우 날짜 유효성 꼼꼼하게 검사
     if (item.trade_type === 'RENTAL') {
       if (!startDate || !endDate) return alert('대여 시작일과 종료일을 모두 선택해 주세요.');
       
@@ -95,7 +94,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       const itemStart = new Date(item.rental_start_date);
       const itemEnd = new Date(item.rental_end_date);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // 오늘 날짜 00시 기준으로 맞춤
+      today.setHours(0, 0, 0, 0);
 
       if (selectedStart < today) return alert('과거 날짜는 선택할 수 없습니다.');
       if (selectedStart > selectedEnd) return alert('종료일이 시작일보다 빠를 수 없습니다.');
@@ -127,6 +126,22 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
+  // ✨ [새 기능] 게시물 삭제 핸들러
+  const handleDelete = async () => {
+    if (!confirm('정말 이 상품을 삭제하시겠습니까?\n(삭제 시 연관된 모든 거래 요청도 함께 지워집니다)')) return;
+    
+    try {
+      // Phase 2에서 ON DELETE CASCADE를 설정해 두었으므로 items 테이블에서 지우면 trade_requests 내역도 자동 삭제됩니다.
+      const { error } = await supabase.from('items').delete().eq('id', item.id);
+      if (error) throw error;
+      
+      alert('상품이 성공적으로 삭제되었습니다.');
+      router.push('/');
+    } catch (error: any) {
+      alert(`삭제 실패: ${error.message}`);
+    }
+  };
+
   if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center font-bold text-slate-400">데이터를 불러오는 중...</div>;
   if (!item) return null;
 
@@ -143,13 +158,33 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
 
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-8">
+          
+          {/* ✨ [새 기능] 이미지가 있을 경우 크게 보여주는 영역 */}
+          {item.image_url && (
+            <div className="w-full aspect-[4/3] sm:aspect-video bg-slate-100 rounded-2xl overflow-hidden mb-6 flex justify-center items-center">
+              <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
+            </div>
+          )}
+
           <div className="flex justify-between items-start mb-6">
             <span className={`text-sm px-3 py-1.5 rounded-md font-extrabold ${
               item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
             }`}>
               {item.trade_type === 'SALE' ? '판매' : '대여'}
             </span>
-            {isMyItem && <span className="text-sm bg-blue-600 text-white font-bold px-3 py-1.5 rounded-full shadow-sm">내가 올린 물품</span>}
+            
+            {/* 내가 올린 물품일 경우 뱃지와 삭제 버튼 동시 표시 */}
+            {isMyItem && (
+              <div className="flex gap-2">
+                <span className="text-sm bg-blue-600 text-white font-bold px-3 py-1.5 rounded-full shadow-sm">내가 올린 물품</span>
+                <button 
+                  onClick={handleDelete}
+                  className="text-sm bg-rose-100 text-rose-600 hover:bg-rose-200 font-bold px-3 py-1.5 rounded-full shadow-sm transition"
+                >
+                  삭제
+                </button>
+              </div>
+            )}
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-black text-slate-800 mb-2">{item.title}</h2>
