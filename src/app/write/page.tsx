@@ -17,6 +17,9 @@ export default function WritePage() {
   const [rentalStartDate, setRentalStartDate] = useState('');
   const [rentalEndDate, setRentalEndDate] = useState('');
   
+  // ✨ [추가됨] 카카오톡 연락처 상태
+  const [contactLink, setContactLink] = useState('');
+  
   // 이미지 파일 관리
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export default function WritePage() {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setImageFile(file);
-      setImagePreview(URL.createObjectURL(file)); // 로컬 미리보기 URL 생성
+      setImagePreview(URL.createObjectURL(file));
     }
   };
 
@@ -59,20 +62,17 @@ export default function WritePage() {
     try {
       let imageUrl = null;
 
-      // 1. 이미지가 선택되었다면 Supabase Storage에 먼저 업로드
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
-        // 파일명이 겹치지 않게 현재 시간과 랜덤 문자열 조합
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from('items') // 방금 만든 버킷 이름
+          .from('items')
           .upload(filePath, imageFile);
 
         if (uploadError) throw uploadError;
 
-        // 업로드 성공 후 이미지를 누구나 볼 수 있는 공용 URL 가져오기
         const { data: publicUrlData } = supabase.storage
           .from('items')
           .getPublicUrl(filePath);
@@ -80,7 +80,7 @@ export default function WritePage() {
         imageUrl = publicUrlData.publicUrl;
       }
 
-      // 2. 알아낸 이미지 URL과 함께 items 테이블에 데이터 저장
+      // ✨ [수정됨] contact_link 추가 저장
       const newItem = {
         seller_id: user.id,
         title,
@@ -90,7 +90,8 @@ export default function WritePage() {
         location,
         rental_start_date: tradeType === 'RENTAL' ? rentalStartDate : null,
         rental_end_date: tradeType === 'RENTAL' ? rentalEndDate : null,
-        image_url: imageUrl, // 이미지 주소 추가!
+        image_url: imageUrl,
+        contact_link: contactLink, // 추가된 연락처 컬럼
         status: 'AVAILABLE'
       };
 
@@ -141,7 +142,6 @@ export default function WritePage() {
 
           <hr className="border-slate-100" />
 
-          {/* 기존 입력 폼들 */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-1">거래 방식</label>
             <div className="flex gap-2">
@@ -181,6 +181,20 @@ export default function WritePage() {
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-1">상세 설명</label>
             <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="물품 상태, 사용 기간 등을 자세히 적어주세요." className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 resize-none"></textarea>
+          </div>
+
+          {/* ✨ [추가됨] 연락처 입력 폼 */}
+          <div>
+            <label className="block text-sm font-bold text-slate-700 mb-1">
+              카카오톡 ID 또는 오픈채팅 링크 <span className="text-blue-500 text-xs font-normal">(거래 승인 시에만 구매자에게 노출됩니다)</span>
+            </label>
+            <input 
+              type="text" 
+              value={contactLink} 
+              onChange={e => setContactLink(e.target.value)} 
+              placeholder="예) 카톡 아이디 hanyang123 또는 오픈채팅 주소" 
+              className="w-full bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-slate-800 focus:outline-yellow-400 font-medium" 
+            />
           </div>
 
           <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-black text-white font-black text-lg py-4 rounded-xl shadow-md transition disabled:bg-slate-300 mt-4">
