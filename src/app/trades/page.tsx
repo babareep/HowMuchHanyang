@@ -1,6 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { isReturnComplete } from '@/features/returns/return-status';
+import { ReturnManagementProvider, ReturnDashboard, ReturnNotice } from '@/features/returns/ReturnManagement';
+
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -15,6 +18,8 @@ export default function TradesPage() {
   const [myItems, setMyItems] = useState<any[]>([]);
   const [receivedRequests, setReceivedRequests] = useState<any[]>([]);
   const [sentRequests, setSentRequests] = useState<any[]>([]);
+  const [completingItemId, setCompletingItemId] = useState<string | null>(null);
+  const completing = useRef(false);
 
   const calculateDays = (start: string, end: string) => {
     if (!start || !end) return 0;
@@ -123,13 +128,22 @@ export default function TradesPage() {
   };
 
   const handleComplete = async (itemId: string, tradeType: string) => {
+    if (completing.current || !user || !myItems.some(item => item.id === itemId && item.seller_id === user.id)) return;
     const actionName = tradeType === 'RENTAL' ? '반납 완료' : '판매 완료';
     if (!confirm(`${actionName} 처리하시겠습니까?`)) return;
-
-    await supabase.from('items').update({ status: 'COMPLETED' }).eq('id', itemId);
-
-    alert(`${actionName} 처리가 완료되었습니다.`);
-    loadAllTradeData();
+    completing.current = true; setCompletingItemId(itemId);
+    try {
+      // Keep the existing item-level completion contract; no DB changes or RPCs.
+      const { data, error } = await supabase.from('items').update({ status: 'COMPLETED' })
+        .eq('id', itemId).eq('seller_id', user.id).eq('status', 'RESERVED').select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error('상태가 변경되었거나 처리 권한이 없습니다. 새로고침 후 확인해 주세요.');
+      alert(`${actionName} 처리가 완료되었습니다.`);
+      await loadAllTradeData();
+    } catch (cause) {
+      const message = cause && typeof cause === 'object' && 'message' in cause ? String(cause.message) : '연결을 확인하고 다시 시도해 주세요.';
+      alert(`완료 처리 실패: ${message}`);
+    } finally { completing.current = false; setCompletingItemId(null); }
   };
 
   if (loading) {
@@ -137,6 +151,7 @@ export default function TradesPage() {
   }
 
   return (
+    <ReturnManagementProvider>
     <div className="min-h-screen bg-slate-50 font-sans pb-24">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -159,6 +174,8 @@ export default function TradesPage() {
           <h1 className="text-2xl font-black text-slate-800">내 거래</h1>
           <p className="text-sm text-slate-500 mt-1">등록한 상품과 주고받은 거래 요청을 확인하세요.</p>
         </div>
+
+        <ReturnDashboard received={receivedRequests} sent={sentRequests} onNavigate={setActiveTab} />
 
         {/* 3단 탭 */}
         <div className="grid grid-cols-3 gap-2 bg-slate-200 p-1 rounded-xl mb-6">
@@ -217,12 +234,13 @@ export default function TradesPage() {
 
                   {item.status === 'RESERVED' && (
                     <button
+                      disabled={completingItemId !== null}
                       onClick={() => handleComplete(item.id, item.trade_type)}
                       className={`px-4 py-2 text-sm font-bold rounded-xl text-white transition ${
                         item.trade_type === 'RENTAL' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-slate-800 hover:bg-slate-900'
                       }`}
                     >
-                      {item.trade_type === 'RENTAL' ? '반납 완료' : '판매 완료'}
+                      {completingItemId === item.id ? '처리 중...' : item.trade_type === 'RENTAL' ? '반납 완료' : '판매 완료'}
                     </button>
                   )}
                 </div>
@@ -251,14 +269,16 @@ export default function TradesPage() {
                         <p className="text-xs text-slate-400 mt-0.5">요청 일시: {new Date(req.created_at).toLocaleDateString()}</p>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                        isReturnComplete(req) || req.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                         req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
                         req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
                         'bg-rose-100 text-rose-700'
                       }`}>
-                        {req.status === 'PENDING' ? '승인 대기' : req.status === 'APPROVED' ? '승인 완료' : '요청 거절됨'}
+                        {isReturnComplete(req) ? '반납 완료' : req.status === 'COMPLETED' ? '거래 완료' : req.status === 'PENDING' ? '승인 대기' : req.status === 'APPROVED' ? '승인 완료' : '요청 거절됨'}
                       </span>
                     </div>
 
+                    <ReturnNotice trade={req} owner />
                     <div className="bg-slate-50 p-4 rounded-xl text-sm font-medium text-slate-700 space-y-1">
                       <p>거래 방식: <span className="font-bold">{req.item?.trade_type === 'SALE' ? '판매' : '대여'}</span></p>
                       {req.rental_start_date && (
@@ -313,14 +333,16 @@ export default function TradesPage() {
                         <p className="text-xs text-slate-400 mt-0.5">신청일: {new Date(req.created_at).toLocaleDateString()}</p>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                        isReturnComplete(req) || req.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
                         req.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
                         req.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' :
                         'bg-rose-100 text-rose-700'
                       }`}>
-                        {req.status === 'PENDING' ? '승인 대기 중' : req.status === 'APPROVED' ? '거래 승인됨' : '요청 거절됨'}
+                        {isReturnComplete(req) ? '반납 완료' : req.status === 'COMPLETED' ? '거래 완료' : req.status === 'PENDING' ? '승인 대기 중' : req.status === 'APPROVED' ? '거래 승인됨' : '요청 거절됨'}
                       </span>
                     </div>
 
+                    <ReturnNotice trade={req} owner={false} />
                     <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-700 space-y-1">
                       <p>가격: <span className="font-bold text-slate-900">{req.item?.price?.toLocaleString()}원</span> {req.item?.trade_type === 'RENTAL' && '/ 1일'}</p>
                       {req.rental_start_date && (
@@ -336,5 +358,6 @@ export default function TradesPage() {
         )}
       </main>
     </div>
+    </ReturnManagementProvider>
   );
 }
