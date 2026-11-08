@@ -5,6 +5,7 @@ import { ReturnManagementProvider, ReturnDashboard, ReturnNotice } from '@/featu
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { locationLabel } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
 type TabType = 'MY_ITEMS' | 'RECEIVED' | 'SENT';
@@ -40,6 +41,7 @@ export default function TradesPage() {
     setUser(currentUser);
 
     try {
+      // 1. 내가 등록한 상품 가져오기
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
         .select('*')
@@ -50,6 +52,7 @@ export default function TradesPage() {
       const items = itemsData || [];
       setMyItems(items);
 
+      // 2. 내가 받은 요청 가져오기
       const myItemIds = items.map((i) => i.id);
       if (myItemIds.length > 0) {
         const { data: recData, error: recError } = await supabase
@@ -69,6 +72,7 @@ export default function TradesPage() {
         setReceivedRequests([]);
       }
 
+      // 3. 내가 보낸 요청 가져오기
       const { data: sentData, error: sentError } = await supabase
         .from('trade_requests')
         .select('*')
@@ -104,6 +108,14 @@ export default function TradesPage() {
   useEffect(() => {
     loadAllTradeData();
   }, [router]);
+
+  // 상품 상세에서 돌아왔을 때 이전 탭(?tab=MY_ITEMS 등) 복원
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'MY_ITEMS' || tab === 'RECEIVED' || tab === 'SENT') {
+      setActiveTab(tab);
+    }
+  }, []);
 
   const handleApprove = async (requestId: string, itemId: string) => {
     if (!confirm('이 요청을 승인하시겠습니까? (거래가 예약 상태로 변경됩니다)')) return;
@@ -211,7 +223,19 @@ export default function TradesPage() {
               </div>
             ) : (
               myItems.map((item) => (
-                <div key={item.id} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                <div
+                  key={item.id}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => router.push(`/items/${item.id}?from=trades`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      router.push(`/items/${item.id}?from=trades`);
+                    }
+                  }}
+                  className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center cursor-pointer transition hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
                   <div>
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs px-2 py-0.5 rounded font-extrabold ${
@@ -222,7 +246,7 @@ export default function TradesPage() {
                       <h3 className="font-bold text-slate-800 text-lg">{item.title}</h3>
                     </div>
                     <p className="text-sm font-semibold text-slate-600">
-                      {item.price?.toLocaleString()}원 {item.trade_type === 'RENTAL' && '/ 1일'} · 📍 {item.location}
+                      {item.price?.toLocaleString()}원 {item.trade_type === 'RENTAL' && '/ 1일'} · 📍 {locationLabel(item.location)}
                     </p>
                     <span className="inline-block mt-2 text-xs font-bold px-2 py-1 bg-slate-100 rounded text-slate-600">
                       상태: {item.status === 'AVAILABLE' ? '거래 대기중' : item.status === 'RESERVED' ? '예약중 (진행중)' : '거래 완료됨'}
@@ -232,7 +256,11 @@ export default function TradesPage() {
                   {item.status === 'RESERVED' && (
                     <button
                       disabled={completingItemId !== null}
-                      onClick={() => handleComplete(item.id, item.trade_type)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleComplete(item.id, item.trade_type);
+                      }}
+                      onKeyDown={(event) => event.stopPropagation()}
                       className={`px-4 py-2 text-sm font-bold rounded-xl text-white transition ${
                         item.trade_type === 'RENTAL' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-slate-800 hover:bg-slate-900'
                       }`}
@@ -284,7 +312,7 @@ export default function TradesPage() {
                           <p>예상 총 대여료: <span className="font-bold text-teal-800">{totalRentalPrice.toLocaleString()}원</span></p>
                         </>
                       )}
-                      <p>희망 장소: 📍 {req.item?.location}</p>
+                      <p>희망 장소: 📍 {locationLabel(req.item?.location)}</p>
                     </div>
 
                     {req.status === 'PENDING' && req.item?.status === 'AVAILABLE' && (
@@ -345,10 +373,10 @@ export default function TradesPage() {
                       {req.rental_start_date && (
                         <p>선택 대여 기간: <span className="font-bold text-teal-700">{req.rental_start_date} ~ {req.rental_end_date} (총 {totalRentalPrice.toLocaleString()}원)</span></p>
                       )}
-                      <p>거래 장소: 📍 {req.item?.location}</p>
+                      <p>거래 장소: 📍 {locationLabel(req.item?.location)}</p>
                     </div>
 
-                    {/* ✨ [추가됨] 승인 완료 시 판매자 카카오톡 연락처 노출 */}
+                    {/* 승인 완료 시 판매자 카카오톡 연락처 노출 */}
                     {req.status === 'APPROVED' && req.item?.contact_link && (
                       <div className="mt-3 bg-yellow-100 border border-yellow-300 p-3 rounded-lg flex items-center gap-2">
                         <span className="text-xl">💬</span>
@@ -358,7 +386,6 @@ export default function TradesPage() {
                         </div>
                       </div>
                     )}
-
                   </div>
                 );
               })

@@ -10,6 +10,7 @@ export interface Item {
   rental_start_date: string | null;
   rental_end_date: string | null;
   image_url?: string | null;
+  contact_link?: string | null;
 }
 
 export function itemStatusLabel(status: string) {
