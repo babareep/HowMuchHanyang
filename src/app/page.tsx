@@ -7,6 +7,7 @@ import type { User } from '@supabase/supabase-js';
 import type { Item } from '@/types/item';
 import { itemStatusLabel } from '@/types/item';
 import ItemImage from '@/components/ItemImage';
+import { locationLabel } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
@@ -253,7 +254,7 @@ export default function Home() {
                     {item.trade_type === 'SALE' ? '판매' : '대여'}
                   </span>
                   <span className="text-xs font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
-                    {item.location}
+                    {locationLabel(item.location)}
                   </span>
                 </div>
                 

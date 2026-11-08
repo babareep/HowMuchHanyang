@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import TradeLocation from '@/components/TradeLocation';
 import { supabase } from '@/lib/supabase';
 
-export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ItemDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const router = useRouter();
   
   const [id, setId] = useState<string | null>(null);
+  // '내 거래' 페이지에서 들어온 경우 뒤로 가기 시 그쪽으로 돌려보냄
+  const [backHref, setBackHref] = useState('/');
   const [user, setUser] = useState<any>(null);
   const [item, setItem] = useState<any>(null);
   const [existingRequest, setExistingRequest] = useState<any>(null);
@@ -23,6 +32,12 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     params.then((resolvedParams) => setId(resolvedParams.id));
   }, [params]);
+
+  useEffect(() => {
+    searchParams.then((sp) => {
+      if (sp.from === 'trades') setBackHref('/trades?tab=MY_ITEMS');
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     if (!id) return;
@@ -135,7 +150,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
       if (error) throw error;
       
       alert('상품이 성공적으로 삭제되었습니다.');
-      router.push('/');
+      router.push(backHref);
     } catch (error: any) {
       alert(`삭제 실패: ${error.message}`);
     }
@@ -150,7 +165,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
     <div className="min-h-screen bg-slate-50 font-sans pb-32">
       <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button onClick={() => router.push('/')} className="text-2xl text-slate-400 hover:text-slate-800">←</button>
+          <button onClick={() => router.push(backHref)} className="text-2xl text-slate-400 hover:text-slate-800">←</button>
           <h1 className="text-lg font-bold text-slate-800 tracking-tight">상품 상세정보</h1>
         </div>
       </header>
@@ -200,7 +215,7 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-400 mb-1">희망 거래 장소</h3>
-              <p className="font-medium text-slate-800 flex items-center gap-2">📍 {item.location}</p>
+              <TradeLocation value={item.location} />
             </div>
             {item.trade_type === 'RENTAL' && item.rental_start_date && (
               <div>

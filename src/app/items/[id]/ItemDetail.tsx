@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import type { Item } from '@/types/item';
 import { itemStatusLabel } from '@/types/item';
+import TradeLocation from '@/components/TradeLocation';
 import ItemImage from '@/components/ItemImage';
 
 export default function ItemDetail() {
@@ -41,7 +42,7 @@ export default function ItemDetail() {
             <div className="flex gap-3 text-sm font-bold text-slate-600"><span>{current.item.trade_type === 'SALE' ? '판매' : '대여'}</span><span>{itemStatusLabel(current.item.status)}</span></div>
             <h1 className="text-3xl font-bold text-slate-900">{current.item.title}</h1>
             <p className="text-2xl font-bold text-blue-900">{current.item.price.toLocaleString()}원{current.item.trade_type === 'RENTAL' && <span className="text-base font-normal"> / 1일</span>}</p>
-            <dl className="space-y-3 text-slate-700"><div><dt className="font-bold">거래 장소</dt><dd>{current.item.location}</dd></div>
+            <dl className="space-y-3 text-slate-700"><div><dt className="font-bold">거래 장소</dt><dd><TradeLocation value={current.item.location} /></dd></div>
               {current.item.trade_type === 'RENTAL' && <div><dt className="font-bold">대여 가능 기간</dt><dd>{current.item.rental_start_date ?? '미정'} ~ {current.item.rental_end_date ?? '미정'}</dd></div>}
             </dl>
             <section className="border-t border-slate-100 pt-5"><h2 className="mb-3 font-bold text-slate-900">상품 설명</h2><p className="whitespace-pre-wrap break-words text-slate-700">{current.item.description}</p></section>
