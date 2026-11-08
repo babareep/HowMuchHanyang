@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import Image from 'next/image';
-import { useRef } from 'react';
 import TradeLocationPicker from '@/components/TradeLocationPicker';
 import { locationLabel } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
@@ -12,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 export default function WritePage() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
-  
+
   // 폼 상태 관리
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -21,11 +20,11 @@ export default function WritePage() {
   const [location, setLocation] = useState('한양대 애지문 앞');
   const [rentalStartDate, setRentalStartDate] = useState('');
   const [rentalEndDate, setRentalEndDate] = useState('');
-  
+
   // 이미지 파일 관리
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fileInput = useRef<HTMLInputElement>(null);
@@ -90,7 +89,7 @@ export default function WritePage() {
         const { data: publicUrlData } = supabase.storage
           .from('items')
           .getPublicUrl(filePath);
-        
+
         imageUrl = publicUrlData.publicUrl;
       }
 
@@ -118,7 +117,7 @@ export default function WritePage() {
       if (previewUrl.current) { URL.revokeObjectURL(previewUrl.current); previewUrl.current = null; }
       if (fileInput.current) fileInput.current.value = '';
       router.push(`/items/${encodeURIComponent(data.id)}`);
-      
+
     } catch (error: unknown) {
       alert(`등록 실패: ${error && typeof error === 'object' && 'message' in error ? String(error.message) : '연결을 확인하고 다시 시도해 주세요.'}`);
     } finally {
@@ -139,7 +138,7 @@ export default function WritePage() {
 
       <main className="max-w-2xl mx-auto px-6 py-8">
         <form onSubmit={handleSubmit} className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
-          
+
           {/* 이미지 업로드 섹션 */}
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">상품 사진</label>
@@ -151,11 +150,11 @@ export default function WritePage() {
                   <span className="text-3xl text-slate-300">📷</span>
                 )}
               </div>
-              <input 
+              <input
                 ref={fileInput}
                 disabled={isSubmitting}
-                type="file" 
-                accept="image/*" 
+                type="file"
+                accept="image/*"
                 onChange={handleImageChange}
                 className="text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
