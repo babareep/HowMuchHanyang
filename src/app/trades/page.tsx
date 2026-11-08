@@ -40,7 +40,6 @@ export default function TradesPage() {
     setUser(currentUser);
 
     try {
-      // 1. 내가 등록한 상품 가져오기
       const { data: itemsData, error: itemsError } = await supabase
         .from('items')
         .select('*')
@@ -51,7 +50,6 @@ export default function TradesPage() {
       const items = itemsData || [];
       setMyItems(items);
 
-      // 2. 내가 받은 요청 가져오기
       const myItemIds = items.map((i) => i.id);
       if (myItemIds.length > 0) {
         const { data: recData, error: recError } = await supabase
@@ -71,7 +69,6 @@ export default function TradesPage() {
         setReceivedRequests([]);
       }
 
-      // 3. 내가 보낸 요청 가져오기
       const { data: sentData, error: sentError } = await supabase
         .from('trade_requests')
         .select('*')
@@ -350,6 +347,18 @@ export default function TradesPage() {
                       )}
                       <p>거래 장소: 📍 {req.item?.location}</p>
                     </div>
+
+                    {/* ✨ [추가됨] 승인 완료 시 판매자 카카오톡 연락처 노출 */}
+                    {req.status === 'APPROVED' && req.item?.contact_link && (
+                      <div className="mt-3 bg-yellow-100 border border-yellow-300 p-3 rounded-lg flex items-center gap-2">
+                        <span className="text-xl">💬</span>
+                        <div>
+                          <p className="text-xs font-bold text-yellow-800 mb-0.5">판매자 연락처 (카카오톡 등)</p>
+                          <p className="text-sm font-black text-slate-900 select-all">{req.item.contact_link}</p>
+                        </div>
+                      </div>
+                    )}
+
                   </div>
                 );
               })

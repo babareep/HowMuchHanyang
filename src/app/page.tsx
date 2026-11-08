@@ -7,6 +7,7 @@ import type { User } from '@supabase/supabase-js';
 import type { Item } from '@/types/item';
 import { itemStatusLabel } from '@/types/item';
 import ItemImage from '@/components/ItemImage';
+import ReturnNavAlert from '@/features/returns/ReturnNavAlert';
 import { supabase } from '@/lib/supabase';
 
 export default function Home() {
@@ -133,7 +134,7 @@ export default function Home() {
                 onClick={() => router.push('/trades')} 
                 className="text-sm font-bold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition"
               >
-                내 거래 관리
+                내 거래 관리 <ReturnNavAlert userId={user.id} />
               </button>
               <button 
                 onClick={handleLogout} 

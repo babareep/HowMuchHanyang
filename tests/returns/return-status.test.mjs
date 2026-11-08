@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { collectReturnTrades, getReturnState, koreaDate, returnLabel } from '../../src/features/returns/return-status.ts';
+import { collectReturnTrades, getReturnState, koreaDate, returnLabel, returnCountdown, returnTextColor } from '../../src/features/returns/return-status.ts';
 const rental = (overrides = {}) => ({ id: 'r1', status: 'APPROVED', rental_start_date: '2026-11-01', rental_end_date: '2026-11-10', item: { title: '닌텐도', trade_type: 'RENTAL', status: 'RESERVED' }, ...overrides });
 
 test('remaining days count down to the return date, and same-day rental is due today', () => {
@@ -44,4 +44,28 @@ test('summary deduplicates requests and orders overdue, today, upcoming and futu
   assert.deepEqual(result.map(entry => entry.trade.id), ['overdue', 'today', 'upcoming']);
   assert.equal(result.find(e => e.trade.id === 'today').direction, 'received');
   assert.deepEqual(collectReturnTrades([], [], '2026-11-10'), []);
+});
+
+test('countdown format distinguishes overdue from upcoming with warning text', () => {
+  assert.equal(returnCountdown(getReturnState(rental(), '2026-10-10')), 'D-31');
+  assert.equal(returnCountdown(getReturnState(rental(), '2026-11-08')), 'D-2');
+  assert.equal(returnCountdown(getReturnState(rental(), '2026-11-10')), 'D-Day');
+  assert.equal(returnCountdown(getReturnState(rental(), '2026-11-12')), 'D-2!!');
+});
+test('font changes from neutral to increasingly urgent red as the due date approaches', () => {
+  const color = date => returnTextColor(getReturnState(rental(), date));
+  assert.equal(color('2026-10-01'), 'text-slate-600');
+  assert.equal(color('2026-10-15'), 'text-rose-500');
+  assert.equal(color('2026-11-01'), 'text-rose-600');
+  assert.equal(color('2026-11-05'), 'text-red-600');
+  assert.equal(color('2026-11-08'), 'text-red-700');
+  assert.equal(color('2026-11-10'), 'text-red-800');
+  assert.equal(color('2026-11-12'), 'text-red-800');
+});
+test('nearest return date leads regardless of whether a rental has started', () => {
+  const active = rental({ id: 'active', rental_end_date: '2026-11-20' });
+  const future = rental({ id: 'future', rental_start_date: '2026-11-11', rental_end_date: '2026-11-12' });
+  const unknown = rental({ id: 'unknown', rental_end_date: null });
+  const overdue = rental({ id: 'overdue', rental_end_date: '2026-11-09' });
+  assert.deepEqual(collectReturnTrades([active, unknown], [future, overdue], '2026-11-10').map(entry => entry.trade.id), ['overdue', 'future', 'active', 'unknown']);
 });

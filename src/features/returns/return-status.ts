@@ -53,6 +53,26 @@ export function collectReturnTrades(received: ReturnTrade[], sent: ReturnTrade[]
       if (state && state.kind !== 'returned') result.set(trade.id, { trade, state, direction });
     }
   }
-  const priority = { overdue: 0, 'due-today': 1, upcoming: 2, scheduled: 3, unknown: 4, returned: 5 };
-  return [...result.values()].sort((a, b) => priority[a.state.kind] - priority[b.state.kind] || (a.state.kind === 'overdue' ? b.state.days - a.state.days : a.state.days - b.state.days));
+  return [...result.values()].sort((a, b) => {
+    if (!a.state.dueDate) return b.state.dueDate ? 1 : a.trade.id.localeCompare(b.trade.id);
+    if (!b.state.dueDate) return -1;
+    return a.state.dueDate.localeCompare(b.state.dueDate) || a.trade.id.localeCompare(b.trade.id);
+  });
+}
+
+export function returnCountdown(state: ReturnState): string {
+  if (state.kind === 'overdue') return `D-${state.days}!!`;
+  if (state.kind === 'due-today') return 'D-Day';
+  if (state.kind === 'upcoming' || state.kind === 'scheduled') return `D-${state.days}`;
+  return returnLabel(state);
+}
+export function returnTextColor(state: ReturnState): string {
+  if (state.kind === 'returned') return 'text-emerald-700';
+  if (state.kind === 'unknown') return 'text-slate-500';
+  if (state.kind === 'overdue' || state.kind === 'due-today') return 'text-red-800';
+  if (state.days <= 3) return 'text-red-700';
+  if (state.days <= 7) return 'text-red-600';
+  if (state.days <= 14) return 'text-rose-600';
+  if (state.days <= 30) return 'text-rose-500';
+  return 'text-slate-600';
 }
