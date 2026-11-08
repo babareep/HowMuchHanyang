@@ -22,20 +22,18 @@ export default function Home() {
   // 한양대 이메일 직접 인증 상태
   const [inputEmail, setInputEmail] = useState('');
   const [inputPassword, setInputPassword] = useState('');
+  const [inputNickname, setInputNickname] = useState(''); 
   const [authSubmitting, setAuthSubmitting] = useState(false);
 
   useEffect(() => {
-    // 1. 로그인 상태 실시간 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
     });
     
-    // 2. 초기 로딩 시 세션 확인
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user || null);
     });
 
-    // 3. 상품 목록 불러오기
     const fetchItems = async () => {
       try {
         const { data, error } = await supabase.from('items').select('*').order('created_at', { ascending: false });
@@ -54,19 +52,21 @@ export default function Home() {
     };
   }, []);
 
-  // 한양대 도메인 검증 함수
   const validateHanyangEmail = (emailStr: string) => {
     return emailStr.trim().toLowerCase().endsWith('@hanyang.ac.kr');
   };
 
-  // 직접 로그인 / 회원가입 핸들러
   const handleAuth = async (isSignUp: boolean) => {
     if (!inputEmail.trim() || !inputPassword.trim()) {
       alert('이메일과 비밀번호를 모두 입력해 주세요.');
       return;
     }
 
-    // 🔒 1순위 핵심 검증: @hanyang.ac.kr 계정인지 차단 검사
+    if (isSignUp && !inputNickname.trim()) {
+      alert('회원가입 시 사용할 닉네임을 입력해 주세요.');
+      return;
+    }
+
     if (!validateHanyangEmail(inputEmail)) {
       alert('❌ 가입/로그인 불가: 한양대학교 웹메일(@hanyang.ac.kr) 계정으로만 이용하실 수 있습니다.');
       return;
@@ -76,15 +76,18 @@ export default function Home() {
 
     try {
       if (isSignUp) {
-        // 회원가입
         const { error } = await supabase.auth.signUp({
           email: inputEmail.trim(),
           password: inputPassword,
+          options: {
+            data: {
+              nickname: inputNickname.trim()
+            }
+          }
         });
         if (error) throw error;
         alert('🎉 한양대 학생 인증 및 회원가입이 완료되었습니다!\n로그인해 주세요.');
       } else {
-        // 로그인
         const { error } = await supabase.auth.signInWithPassword({
           email: inputEmail.trim(),
           password: inputPassword,
@@ -92,6 +95,7 @@ export default function Home() {
         if (error) throw error;
         setInputEmail('');
         setInputPassword('');
+        setInputNickname('');
       }
     } catch (err: any) {
       alert(`인증 실패: ${err.message}`);
@@ -100,38 +104,31 @@ export default function Home() {
     }
   };
 
-  // 해커톤 시연용 간편 로그인 (원클릭)
   const handleQuickLogin = async (email: string) => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: 'password1234!',
     });
-    
-    if (error) {
-      alert(`❌ 로그인 실패!\n이유: ${error.message}\n(Supabase에 계정이 등록되어 있는지 확인해 주세요)`);
-    }
+    if (error) alert(`❌ 로그인 실패!\n이유: ${error.message}`);
   };
 
-  // 로그아웃
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-24 relative">
-      {/* 상단 헤더 */}
       <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/')}>
-            <h1 aria-label="얼마하냥">
-              <Logo />
-            </h1>
+            <h1 aria-label="얼마하냥"><Logo /></h1>
           </div>
           
           {user ? (
             <div className="flex items-center gap-3 sm:gap-4">
+              {/* ✨ [수정됨] 상단 계정명을 닉네임으로 고정 (없으면 무조건 '한양인') */}
               <span className="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100 hidden sm:inline-block">
-                🎓 {user.email}
+                🎓 {user.user_metadata?.nickname || '한양인'}
               </span>
               <button 
                 onClick={() => router.push('/trades')} 
@@ -153,7 +150,6 @@ export default function Home() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-8">
-        {/* 로그인 / 회원가입 섹션 (미로그인 시 노출) */}
         {!user && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-8 space-y-6">
             <div>
@@ -168,7 +164,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* 이메일 / 비밀번호 입력 폼 */}
             <div className="space-y-3">
               <input
                 type="email"
@@ -184,6 +179,14 @@ export default function Home() {
                 onChange={(e) => setInputPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-800 focus:outline-none focus:border-blue-600"
               />
+              <input 
+                type="text" 
+                placeholder="닉네임 (새로 가입할 때만 입력해 주세요)" 
+                value={inputNickname} 
+                onChange={(e) => setInputNickname(e.target.value)} 
+                className="w-full bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm font-medium text-blue-900 focus:outline-none focus:border-blue-600 placeholder-blue-400" 
+              />
+              
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -204,7 +207,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 발표/심사용 빠른 테스트 계정 바로가기 */}
             <div className="pt-4 border-t border-slate-100">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
                 ⚡ 발표 심사용 원클릭 계정
@@ -227,7 +229,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* 상품 목록 섹션 */}
         <div className="flex justify-between items-end mb-4 px-1">
           <h2 className="text-xl font-bold text-slate-800">최근 올라온 물품</h2>
           <span className="text-sm font-medium text-slate-500">총 {items.length}개</span>
@@ -250,12 +251,18 @@ export default function Home() {
             {items.map((item) => (
               <Link key={item.id} href={`/items/${encodeURIComponent(item.id)}`} className="block bg-white border border-slate-100 p-5 rounded-2xl shadow-sm hover:shadow-md transition focus-visible:outline-2 focus-visible:outline-blue-600">
                 <div className="mb-4"><ItemImage src={item.image_url} title={item.title} /></div>
+                
                 <div className="flex justify-between items-start mb-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-md font-extrabold ${
-                    item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
-                  }`}>
-                    {item.trade_type === 'SALE' ? '판매' : '대여'}
-                  </span>
+                  <div className="flex gap-2 items-center">
+                    <span className={`text-xs px-2.5 py-1 rounded-md font-extrabold ${
+                      item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
+                    }`}>
+                      {item.trade_type === 'SALE' ? '판매' : '대여'}
+                    </span>
+                    <span className="text-xs font-bold text-slate-500">
+                      👤 {(item as any).seller_nickname || '한양인'}
+                    </span>
+                  </div>
                   <span className="text-xs font-medium text-slate-400 bg-slate-50 px-2 py-1 rounded-md">
                     {locationLabel(item.location)}
                   </span>
@@ -279,7 +286,6 @@ export default function Home() {
         )}
       </main>
 
-      {/* 오른쪽 아래 글쓰기 플로팅 버튼 */}
       {user && (
         <button 
           onClick={() => router.push('/write')}

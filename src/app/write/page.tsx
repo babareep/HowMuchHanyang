@@ -164,6 +164,7 @@ function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> 
       // 2. 알아낸 이미지 URL과 함께 items 테이블에 데이터 저장
       const newItem = {
         seller_id: user.id,
+        seller_nickname: user.user_metadata?.nickname || '한양인', // ✨ 누락되었던 닉네임 저장 핵심 코드 추가 완료!
         title: title.trim(),
         description: description.trim(),
         trade_type: tradeType,

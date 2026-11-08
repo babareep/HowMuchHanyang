@@ -140,12 +140,11 @@ export default function ItemDetailPage({
     }
   };
 
-  // ✨ [새 기능] 게시물 삭제 핸들러
+  // 게시물 삭제 핸들러
   const handleDelete = async () => {
     if (!confirm('정말 이 상품을 삭제하시겠습니까?\n(삭제 시 연관된 모든 거래 요청도 함께 지워집니다)')) return;
     
     try {
-      // Phase 2에서 ON DELETE CASCADE를 설정해 두었으므로 items 테이블에서 지우면 trade_requests 내역도 자동 삭제됩니다.
       const { error } = await supabase.from('items').delete().eq('id', item.id);
       if (error) throw error;
       
@@ -173,7 +172,6 @@ export default function ItemDetailPage({
       <main className="max-w-2xl mx-auto px-6 py-8 space-y-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-8">
           
-          {/* ✨ [새 기능] 이미지가 있을 경우 크게 보여주는 영역 */}
           {item.image_url && (
             <div className="w-full aspect-[4/3] sm:aspect-video bg-slate-100 rounded-2xl overflow-hidden mb-6 flex justify-center items-center">
               <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
@@ -181,13 +179,19 @@ export default function ItemDetailPage({
           )}
 
           <div className="flex justify-between items-start mb-6">
-            <span className={`text-sm px-3 py-1.5 rounded-md font-extrabold ${
-              item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
-            }`}>
-              {item.trade_type === 'SALE' ? '판매' : '대여'}
-            </span>
+            {/* ✨ 판매/대여 뱃지와 닉네임 뱃지를 나란히 배치 */}
+            <div className="flex items-center gap-2">
+              <span className={`text-sm px-3 py-1.5 rounded-md font-extrabold ${
+                item.trade_type === 'SALE' ? 'bg-orange-100 text-orange-700' : 'bg-teal-100 text-teal-700'
+              }`}>
+                {item.trade_type === 'SALE' ? '판매' : '대여'}
+              </span>
+              <span className="text-sm font-bold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
+                👤 {item.seller_nickname || '한양인'}
+              </span>
+            </div>
             
-            {/* 내가 올린 물품일 경우 뱃지와 삭제 버튼 동시 표시 */}
+            {/* 내가 올린 물품일 경우 수정/삭제 버튼 */}
             {isMyItem && (
               <div className="flex gap-2">
                 <span className="text-sm bg-blue-600 text-white font-bold px-3 py-1.5 rounded-full shadow-sm">내가 올린 물품</span>
