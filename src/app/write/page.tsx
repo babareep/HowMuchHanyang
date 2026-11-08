@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, use, useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { User } from '@supabase/supabase-js';
 import Image from 'next/image';
@@ -8,9 +8,23 @@ import TradeLocationPicker from '@/components/TradeLocationPicker';
 import { locationLabel } from '@/lib/campus-location';
 import { supabase } from '@/lib/supabase';
 
-export default function WritePage() {
+// searchParams 접근은 Suspense 안에서 해야 /write 를 빌드 시 미리 렌더링할 수 있음
+export default function WritePage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+  return (
+    <Suspense fallback={<p role="status" className="p-8 text-center">페이지를 불러오는 중입니다...</p>}>
+      <WriteForm searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+function WriteForm({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
   const router = useRouter();
+  // ?edit=<상품 id> 로 들어오면 기존 글 수정 모드
+  const editId = use(searchParams).edit ?? null;
+  const isEdit = Boolean(editId);
   const [user, setUser] = useState<User | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [editLoaded, setEditLoaded] = useState(!isEdit);
 
   // 폼 상태 관리
   const [title, setTitle] = useState('');
@@ -41,12 +55,36 @@ export default function WritePage() {
       if (!session) {
         alert('로그인이 필요한 서비스입니다.');
         router.push('/');
-      } else {
-        setUser(session.user);
+        return;
       }
+      if (editId) {
+        const { data: item, error } = await supabase.from('items').select('*').eq('id', editId).maybeSingle();
+        if (error || !item) {
+          alert('존재하지 않거나 삭제된 상품입니다.');
+          router.push('/');
+          return;
+        }
+        if (item.seller_id !== session.user.id) {
+          alert('내가 올린 물품만 수정할 수 있습니다.');
+          router.push(`/items/${encodeURIComponent(editId)}`);
+          return;
+        }
+        setTitle(item.title ?? '');
+        setDescription(item.description ?? '');
+        setTradeType(item.trade_type ?? 'SALE');
+        setPrice(item.price != null ? String(item.price) : '');
+        setLocation(item.location ?? '');
+        setRentalStartDate(item.rental_start_date ?? '');
+        setRentalEndDate(item.rental_end_date ?? '');
+        setContactLink(item.contact_link ?? '');
+        setExistingImageUrl(item.image_url ?? null);
+        setImagePreview(item.image_url ?? null);
+        setEditLoaded(true);
+      }
+      setUser(session.user);
     };
     checkUser();
-  }, [router]);
+  }, [router, editId]);
 
   // 이미지 선택 시 미리보기 처리
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -73,7 +111,7 @@ export default function WritePage() {
     setIsSubmitting(true);
 
     try {
-      let imageUrl = null;
+      let imageUrl: string | null = existingImageUrl;
 
       // 1. 이미지가 선택되었다면 Supabase Storage에 먼저 업로드
       if (imageFile) {
@@ -94,6 +132,33 @@ export default function WritePage() {
           .getPublicUrl(filePath);
 
         imageUrl = publicUrlData.publicUrl;
+      }
+
+      const fields = {
+        title: title.trim(),
+        description: description.trim(),
+        trade_type: tradeType,
+        price: amount,
+        location,
+        rental_start_date: tradeType === 'RENTAL' ? rentalStartDate : null,
+        rental_end_date: tradeType === 'RENTAL' ? rentalEndDate : null,
+        image_url: imageUrl,
+        contact_link: contactLink.trim() || null,
+      };
+
+      // 수정 모드: 기존 글 업데이트 (작성자 본인 글만)
+      if (editId) {
+        const { data: updated, error: updateError } = await supabase
+          .from('items')
+          .update(fields)
+          .eq('id', editId)
+          .eq('seller_id', user.id)
+          .select('id');
+        if (updateError) throw updateError;
+        if (!updated || updated.length === 0) throw new Error('수정 권한이 없거나 상품을 찾을 수 없습니다.');
+        alert('성공적으로 수정되었습니다!');
+        router.push(`/items/${encodeURIComponent(editId)}`);
+        return;
       }
 
       // 2. 알아낸 이미지 URL과 함께 items 테이블에 데이터 저장
@@ -124,20 +189,20 @@ export default function WritePage() {
       router.push(`/items/${encodeURIComponent(data.id)}`);
 
     } catch (error: unknown) {
-      alert(`등록 실패: ${error && typeof error === 'object' && 'message' in error ? String(error.message) : '연결을 확인하고 다시 시도해 주세요.'}`);
+      alert(`${isEdit ? '수정' : '등록'} 실패: ${error && typeof error === 'object' && 'message' in error ? String(error.message) : '연결을 확인하고 다시 시도해 주세요.'}`);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  if (!user) return <p role="status" className="p-8 text-center">로그인 상태를 확인하는 중입니다...</p>;
+  if (!user || !editLoaded) return <p role="status" className="p-8 text-center">{isEdit ? '상품 정보를 불러오는 중입니다...' : '로그인 상태를 확인하는 중입니다...'}</p>;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <header className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-6 py-4 flex items-center gap-4">
-          <button onClick={() => router.push('/')} className="text-2xl text-slate-400 hover:text-slate-800">←</button>
-          <h1 className="text-xl font-extrabold text-slate-800">물품 등록하기</h1>
+          <button onClick={() => router.push(editId ? `/items/${encodeURIComponent(editId)}` : '/')} className="text-2xl text-slate-400 hover:text-slate-800">←</button>
+          <h1 className="text-xl font-extrabold text-slate-800">{isEdit ? '물품 수정하기' : '물품 등록하기'}</h1>
         </div>
       </header>
 
@@ -223,7 +288,7 @@ export default function WritePage() {
           </div>
 
           <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 hover:bg-black text-white font-black text-lg py-4 rounded-xl shadow-md transition disabled:bg-slate-300 mt-4">
-            {isSubmitting ? '업로드 중...' : '등록 완료하기'}
+            {isSubmitting ? (isEdit ? '저장 중...' : '업로드 중...') : (isEdit ? '수정 완료하기' : '등록 완료하기')}
           </button>
         </form>
       </main>

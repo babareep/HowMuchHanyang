@@ -191,7 +191,13 @@ export default function ItemDetailPage({
             {isMyItem && (
               <div className="flex gap-2">
                 <span className="text-sm bg-blue-600 text-white font-bold px-3 py-1.5 rounded-full shadow-sm">내가 올린 물품</span>
-                <button 
+                <button
+                  onClick={() => router.push(`/write?edit=${encodeURIComponent(item.id)}`)}
+                  className="text-sm bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold px-3 py-1.5 rounded-full shadow-sm transition"
+                >
+                  수정
+                </button>
+                <button
                   onClick={handleDelete}
                   className="text-sm bg-rose-100 text-rose-600 hover:bg-rose-200 font-bold px-3 py-1.5 rounded-full shadow-sm transition"
                 >
